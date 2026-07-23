@@ -101,4 +101,19 @@ async def delete(
     return {
         "message": "Ticket deleted successfully"
     }
- 
+
+@router.get(
+    "/health",
+    response_model=dict[str, str]
+)
+async def health_check():
+    return {"status": "healthy"}
+
+@router.get("/ready")
+async def readiness_check():
+    if not await ticket_service.is_database_ready():
+        raise HTTPException(
+            status_code=503,
+            detail="Database is not ready"
+        )
+    return {"status": "ready"}

@@ -11,6 +11,9 @@ from app.db.database import init_db
 from sqlalchemy import text
 from app.db.database import AsyncSessionLocal
 from fastapi.responses import JSONResponse
+from app.api.ai import router as ai_router
+from app.core.cprofile_middleware import CProfileMiddleware
+
  
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -24,6 +27,7 @@ app = FastAPI(
     lifespan=lifespan,
 )
  
+app.add_middleware(CProfileMiddleware)
  
 @app.middleware("http")
 async def add_response_time(
@@ -60,6 +64,7 @@ async def ticket_not_found_handler(
  
  
 app.include_router(ticket_router)
+app.include_router(ai_router)
  
  
 @app.get("/")
@@ -67,6 +72,11 @@ async def root():
     return {
         "message": "Welcome to AI Service Desk"
     }
+
+
+@app.get("/health")
+async def health():
+    return {"status": "ok"}
  
  
  

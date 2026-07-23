@@ -1,0 +1,34 @@
+==================================================
+ cProfile Execution Report: profile_read_tickets
+ Sorted By: cumulative (Top 20 Calls)
+ Saved Binary: cprofile_results\profile_read_tickets.prof
+==================================================
+
+         18322 function calls (18099 primitive calls) in 0.047 seconds
+
+   Ordered by: cumulative time
+   List reduced from 1087 to 20 due to restriction <20>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+    83/82    0.001    0.000    0.068    0.001 base_events.py:1980(_run_once)
+      129    0.000    0.000    0.064    0.000 events.py:87(_run)
+      129    0.001    0.000    0.063    0.000 {method 'run' of '_contextvars.Context' objects}
+       54    0.000    0.000    0.042    0.001 _tasks.py:270(_run_coro)
+       54    0.000    0.000    0.042    0.001 base.py:139(coro)
+       27    0.000    0.000    0.039    0.001 exceptions.py:47(__call__)
+    54/27    0.000    0.000    0.036    0.001 _exception_handler.py:31(wrapped_app)
+       27    0.000    0.000    0.036    0.001 asyncexitstack.py:15(__call__)
+       27    0.000    0.000    0.036    0.001 routing.py:656(__call__)
+       27    0.000    0.000    0.036    0.001 routing.py:2670(app)
+       27    0.000    0.000    0.035    0.001 routing.py:1764(handle)
+       27    0.000    0.000    0.034    0.001 routing.py:2734(handle)
+       27    0.000    0.000    0.020    0.001 routing.py:1768(_handle_selected)
+       27    0.000    0.000    0.019    0.001 routing.py:1247(handle)
+       27    0.000    0.000    0.013    0.000 routing.py:127(app)
+       19    0.000    0.000    0.013    0.001 cprofile_runner.py:138(_workload)
+       21    0.000    0.000    0.013    0.001 _client.py:1751(get)
+       21    0.000    0.000    0.013    0.001 _client.py:1485(request)
+       21    0.000    0.000    0.011    0.001 _client.py:1594(send)
+       21    0.000    0.000    0.010    0.000 _client.py:1645(_send_handling_auth)
+
+

@@ -91,6 +91,14 @@ class TicketService:
         )
  
         return True
+
+    async def is_database_ready(self) -> bool:
+        try:
+            async with AsyncSessionLocal() as session:
+                await session.execute(text("SELECT 1"))
+            return True
+        except Exception:
+            return False
  
  
 ticket_service = TicketService() 
