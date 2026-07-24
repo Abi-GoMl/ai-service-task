@@ -1,9 +1,3 @@
-"""
-cProfile Runner for AI Service Desk
-Runs cProfile profiling sessions on FastAPI application operations and outputs
-detailed call statistics, CPU bottlenecks, and binary .prof stats files for visualization.
-"""
-
 import argparse
 import asyncio
 import cProfile
