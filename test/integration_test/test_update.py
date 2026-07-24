@@ -4,13 +4,13 @@ from httpx import AsyncClient
 
 
 # =====================================================================
-# Integration Tests for UPDATE Operation (PATCH /tickets/{ticket_id})
+# Integration Tests for UPDATE Operation (PATCH /tickets/{ticket_id}) - 4 Test Cases
 # =====================================================================
 
 @pytest.mark.asyncio
 async def test_integration_update_ticket_success(async_client: AsyncClient):
     """
-    Integration: Test updating a ticket title, priority, status, and assignee via PATCH /tickets/{id}.
+    Integration: Test updating a ticket title, priority, status, and assignee via PATCH /tickets/{id} (Happy Path).
     """
     # 1. Create a ticket
     create_res = await async_client.post("/tickets", json={
@@ -38,7 +38,7 @@ async def test_integration_update_ticket_success(async_client: AsyncClient):
 @pytest.mark.asyncio
 async def test_integration_update_ticket_not_found(async_client: AsyncClient):
     """
-    Integration: Test PATCH /tickets/{ticket_id} with non-existent ID returns HTTP 404.
+    Integration: Test PATCH /tickets/{ticket_id} with non-existent ID returns HTTP 404 (Failure Path).
     """
     non_existent_id = str(uuid.uuid4())
     update_payload = {"title": "New Title"}
@@ -53,7 +53,7 @@ async def test_integration_update_ticket_not_found(async_client: AsyncClient):
 @pytest.mark.asyncio
 async def test_integration_update_reopen_closed_ticket_fails(async_client: AsyncClient):
     """
-    Integration: Test attempting to reopen a closed ticket returns HTTP 400 Bad Request.
+    Integration: Test attempting to reopen a closed ticket returns HTTP 400 Bad Request (Business Rule Failure Path).
     """
     # 1. Create ticket
     create_res = await async_client.post("/tickets", json={"title": "Ticket to Close", "priority": "medium"})
@@ -70,26 +70,21 @@ async def test_integration_update_reopen_closed_ticket_fails(async_client: Async
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize(
-    "invalid_update_body, expected_status",
-    [
-        ({"title": ""}, 422),             # Blank title string
-        ({"title": "   "}, 422),          # Whitespace title
-        ({"priority": "invalid"}, 422),   # Invalid priority enum
-        ({"status": "unknown_status"}, 422) # Invalid status enum
-    ]
-)
-async def test_integration_update_validation_errors(
-    async_client: AsyncClient,
-    invalid_update_body: dict,
-    expected_status: int,
-):
+async def test_integration_update_validation_errors(async_client: AsyncClient):
     """
-    Integration: Test invalid update payloads return HTTP 422.
+    Integration: Test invalid update payloads return HTTP 422 Unprocessable Entity (Validation Failure Path).
     """
     # Create ticket
     create_res = await async_client.post("/tickets", json={"title": "Validation Target", "priority": "low"})
     ticket_id = create_res.json()["id"]
 
-    response = await async_client.patch(f"/tickets/{ticket_id}", json=invalid_update_body)
-    assert response.status_code == expected_status
+    invalid_bodies = [
+        {"title": ""},             # Blank title string
+        {"title": "   "},          # Whitespace title
+        {"priority": "invalid"},   # Invalid priority enum
+        {"status": "unknown"}      # Invalid status enum
+    ]
+
+    for body in invalid_bodies:
+        response = await async_client.patch(f"/tickets/{ticket_id}", json=body)
+        assert response.status_code == 422

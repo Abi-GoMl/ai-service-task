@@ -14,7 +14,9 @@ RUN pip install --no-cache-dir --upgrade pip \
 COPY --chown=app:app .env .
 COPY --chown=app:app main.py .
 COPY --chown=app:app app ./app
- 
+
+RUN chown -R app:app /app
+
 USER app
 EXPOSE 8000
  

@@ -12,6 +12,7 @@ from sqlalchemy import text
 from app.db.database import AsyncSessionLocal
 from fastapi.responses import JSONResponse
 from app.api.ai import router as ai_router
+from fastapi.middleware.cors import CORSMiddleware
 from app.core.cprofile_middleware import CProfileMiddleware
 
  
@@ -27,6 +28,13 @@ app = FastAPI(
     lifespan=lifespan,
 )
  
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 app.add_middleware(CProfileMiddleware)
  
 @app.middleware("http")
@@ -47,6 +55,8 @@ async def add_response_time(
     )
  
     return response
+
+
  
  
 @app.exception_handler(TicketNotFoundError)
@@ -77,6 +87,7 @@ async def root():
 @app.get("/health")
 async def health():
     return {"status": "ok"}
- 
- 
- 
+
+@app.get("/ready")
+async def ready():
+    return {"status": "ready"}

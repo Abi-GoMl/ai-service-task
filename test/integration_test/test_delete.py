@@ -4,13 +4,13 @@ from httpx import AsyncClient
 
 
 # =====================================================================
-# Integration Tests for DELETE Operation (DELETE /tickets/{ticket_id})
+# Integration Tests for DELETE Operation (DELETE /tickets/{ticket_id}) - 3 Test Cases
 # =====================================================================
 
 @pytest.mark.asyncio
 async def test_integration_delete_ticket_success(async_client: AsyncClient):
     """
-    Integration: Test deleting an existing ticket via DELETE /tickets/{ticket_id}.
+    Integration: Test deleting an existing ticket via DELETE /tickets/{ticket_id} (Happy Path).
     Verifies that subsequent GET returns HTTP 404.
     """
     # 1. Create a ticket
@@ -34,7 +34,7 @@ async def test_integration_delete_ticket_success(async_client: AsyncClient):
 @pytest.mark.asyncio
 async def test_integration_delete_ticket_not_found(async_client: AsyncClient):
     """
-    Integration: Test DELETE /tickets/{ticket_id} with non-existent ID returns HTTP 404.
+    Integration: Test DELETE /tickets/{ticket_id} with non-existent ID returns HTTP 404 (Failure Path).
     """
     non_existent_id = str(uuid.uuid4())
 
@@ -44,3 +44,15 @@ async def test_integration_delete_ticket_not_found(async_client: AsyncClient):
     data = response.json()
     assert data["error"] == "ticket_not_found"
     assert data["id"] == non_existent_id
+
+
+@pytest.mark.asyncio
+async def test_integration_delete_ticket_invalid_uuid(async_client: AsyncClient):
+    """
+    Integration: Test DELETE /tickets/{ticket_id} with malformed UUID path parameter returns HTTP 422 (Edge Case).
+    """
+    invalid_id = "not-a-valid-uuid-format"
+
+    response = await async_client.delete(f"/tickets/{invalid_id}")
+
+    assert response.status_code == 422

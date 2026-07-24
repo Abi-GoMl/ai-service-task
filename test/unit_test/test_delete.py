@@ -1,5 +1,5 @@
 import uuid
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -10,7 +10,7 @@ from app.services.ticket_service import ticket_service
 
 
 # =====================================================================
-# Unit Tests for DELETE Operation (ZONEF Principles)
+# Unit Tests for DELETE Operation (ZONEF Principles) - 6 Test Cases
 # =====================================================================
 
 # ---------------------------------------------------------------------
@@ -74,49 +74,47 @@ async def test_unit_delete_numerous_tickets(mock_db: AsyncMock):
 
 
 # ---------------------------------------------------------------------
-# E - Exception: Non-existent ticket ID raises TicketNotFoundError
+# E - Exception: Failure scenarios & DB rollback (2 Cases)
 # ---------------------------------------------------------------------
 @pytest.mark.asyncio
-async def test_unit_delete_exception_not_found(mock_db: AsyncMock):
+@pytest.mark.parametrize(
+    "exception_type",
+    ["service_not_found", "repo_db_rollback"]
+)
+async def test_unit_delete_exceptions(mock_db: AsyncMock, exception_type: str):
     """
-    E - Exception: Test TicketNotFoundError is raised by service when ticket ID does not exist.
-    """
-    non_existent_id = uuid.uuid4()
-    mock_db.get.return_value = None
-
-    with pytest.raises(TicketNotFoundError) as exc_info:
-        await ticket_service.delete_ticket(mock_db, non_existent_id)
-
-    assert exc_info.value.ticket_id == str(non_existent_id)
-
-
-@pytest.mark.asyncio
-async def test_unit_delete_exception_db_error_triggers_rollback(mock_db: AsyncMock):
-    """
-    E - Exception: Test database failure during deletion triggers rollback in repository.
+    E - Exception: Test TicketNotFoundError in service and database rollback in repository.
     """
     sample_id = uuid.uuid4()
-    existing_ticket = Ticket(id=sample_id, title="Ticket DB error", priority="low")
-    mock_db.get.return_value = existing_ticket
-    mock_db.flush.side_effect = RuntimeError("Delete constraint error")
 
-    with pytest.raises(RuntimeError):
-        await ticket_repository.delete_ticket(mock_db, sample_id)
+    if exception_type == "service_not_found":
+        mock_db.get.return_value = None
+        with pytest.raises(TicketNotFoundError) as exc_info:
+            await ticket_service.delete_ticket(mock_db, sample_id)
+        assert exc_info.value.ticket_id == str(sample_id)
 
-    mock_db.rollback.assert_awaited_once()
+    elif exception_type == "repo_db_rollback":
+        existing_ticket = Ticket(id=sample_id, title="Ticket DB error", priority="low")
+        mock_db.get.return_value = existing_ticket
+        mock_db.flush.side_effect = RuntimeError("Delete constraint error")
+
+        with pytest.raises(RuntimeError):
+            await ticket_repository.delete_ticket(mock_db, sample_id)
+
+        mock_db.rollback.assert_awaited_once()
 
 
 # ---------------------------------------------------------------------
-# F - Format & Boundary: Test parameter types and string representations
+# F - Format & Boundary: Valid UUID format handling
 # ---------------------------------------------------------------------
 @pytest.mark.asyncio
-@pytest.mark.parametrize("uuid_instance", [uuid.uuid4(), uuid.uuid4(), uuid.uuid4()])
-async def test_unit_delete_format_valid_uuid_types(mock_db: AsyncMock, uuid_instance: uuid.UUID):
+async def test_unit_delete_format_valid_uuid_types(mock_db: AsyncMock):
     """
-    F - Format/Boundary: Test delete_ticket handles various valid UUID format inputs cleanly.
+    F - Format/Boundary: Test delete_ticket handles various valid UUID instances cleanly.
     """
-    ticket = Ticket(id=uuid_instance, title="Formatted UUID Ticket", priority="high")
+    sample_uuid = uuid.uuid4()
+    ticket = Ticket(id=sample_uuid, title="Formatted UUID Ticket", priority="high")
     mock_db.get.return_value = ticket
 
-    result = await ticket_service.delete_ticket(mock_db, uuid_instance)
+    result = await ticket_service.delete_ticket(mock_db, sample_uuid)
     assert result is True

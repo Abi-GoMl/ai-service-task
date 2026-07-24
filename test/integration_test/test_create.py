@@ -3,13 +3,13 @@ from httpx import AsyncClient
 
 
 # =====================================================================
-# Integration Tests for CREATE Operation (POST /tickets)
+# Integration Tests for CREATE Operation (POST /tickets) - 5 Test Cases
 # =====================================================================
 
 @pytest.mark.asyncio
 async def test_integration_create_ticket_success(async_client: AsyncClient):
     """
-    Integration: Test successful ticket creation via POST /tickets endpoint.
+    Integration: Test successful ticket creation via POST /tickets endpoint (Happy Path).
     """
     payload = {
         "title": "Integration Test Ticket",
@@ -35,7 +35,7 @@ async def test_integration_create_ticket_success(async_client: AsyncClient):
 )
 async def test_integration_create_ticket_priorities(async_client: AsyncClient, priority: str):
     """
-    Integration: Test ticket creation across all valid priority levels using parametrization.
+    Integration: Test ticket creation across all valid priority levels (3 Cases).
     """
     payload = {
         "title": f"Ticket for priority {priority}",
@@ -50,34 +50,20 @@ async def test_integration_create_ticket_priorities(async_client: AsyncClient, p
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize(
-    "invalid_payload, expected_status",
-    [
-        ({"title": "ab", "priority": "low"}, 422),           # Title too short (<3 chars)
-        ({"title": "a" * 201, "priority": "medium"}, 422),  # Title too long (>200 chars)
-        ({"title": "", "priority": "high"}, 422),           # Blank title
-        ({"title": "    ", "priority": "high"}, 422),       # Whitespace title
-        ({"title": "Valid Title"}, 422),                    # Missing priority
-        ({"priority": "medium"}, 422),                       # Missing title
-        ({"title": "Valid Title", "priority": "urgent"}, 422) # Invalid priority enum
-    ],
-    ids=[
-        "title_too_short",
-        "title_too_long",
-        "title_empty",
-        "title_whitespace",
-        "missing_priority",
-        "missing_title",
-        "invalid_priority"
+async def test_integration_create_ticket_validation_failures(async_client: AsyncClient):
+    """
+    Integration: Test invalid payloads return HTTP 422 Unprocessable Entity (Failure & Edge Cases).
+    """
+    invalid_payloads = [
+        {"title": "ab", "priority": "low"},           # Title too short (<3 chars)
+        {"title": "a" * 201, "priority": "medium"},  # Title too long (>200 chars)
+        {"title": "", "priority": "high"},           # Blank title
+        {"title": "    ", "priority": "high"},       # Whitespace title
+        {"title": "Valid Title"},                    # Missing priority
+        {"priority": "medium"},                       # Missing title
+        {"title": "Valid Title", "priority": "urgent"} # Invalid priority enum
     ]
-)
-async def test_integration_create_ticket_validation_failures(
-    async_client: AsyncClient,
-    invalid_payload: dict,
-    expected_status: int
-):
-    """
-    Integration: Test invalid create payloads return HTTP 422 Unprocessable Entity.
-    """
-    response = await async_client.post("/tickets", json=invalid_payload)
-    assert response.status_code == expected_status
+
+    for payload in invalid_payloads:
+        response = await async_client.post("/tickets", json=payload)
+        assert response.status_code == 422

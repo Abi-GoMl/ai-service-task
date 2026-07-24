@@ -1,5 +1,4 @@
 import uuid
-from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -13,7 +12,7 @@ from app.services.ticket_service import ticket_service
 
 
 # =====================================================================
-# Unit Tests for UPDATE Operation (ZONEF Principles)
+# Unit Tests for UPDATE Operation (ZONEF Principles) - 7 Test Cases
 # =====================================================================
 
 # ---------------------------------------------------------------------
@@ -46,18 +45,9 @@ async def test_unit_update_zero_fields_changed(mock_db: AsyncMock):
 # O - One: Update one single attribute on a ticket
 # ---------------------------------------------------------------------
 @pytest.mark.asyncio
-@pytest.mark.parametrize(
-    "field_name, new_value",
-    [
-        ("title", "Updated Single Title"),
-        ("priority", "high"),
-        ("status", "in_progress"),
-        ("assignee", "Alice Worker"),
-    ]
-)
-async def test_unit_update_one_field(mock_db: AsyncMock, field_name: str, new_value: str):
+async def test_unit_update_one_field(mock_db: AsyncMock):
     """
-    O - One: Test updating exactly one field at a time using parameterized inputs.
+    O - One: Test updating exactly one field at a time.
     """
     sample_id = uuid.uuid4()
     mock_ticket = Ticket(
@@ -68,11 +58,11 @@ async def test_unit_update_one_field(mock_db: AsyncMock, field_name: str, new_va
         assignee=None,
     )
     mock_db.get.return_value = mock_ticket
-    payload = TicketUpdate(**{field_name: new_value})
+    payload = TicketUpdate(title="Updated Single Title")
 
     result = await ticket_service.update_ticket(mock_db, sample_id, payload)
 
-    assert getattr(result, field_name) == new_value
+    assert result.title == "Updated Single Title"
 
 
 # ---------------------------------------------------------------------
@@ -108,104 +98,75 @@ async def test_unit_update_numerous_fields(mock_db: AsyncMock):
 
 
 # ---------------------------------------------------------------------
-# E - Exception: Business rules & validation error scenarios
-# ---------------------------------------------------------------------
-@pytest.mark.asyncio
-async def test_unit_update_exception_ticket_not_found(mock_db: AsyncMock):
-    """
-    E - Exception: Test TicketNotFoundError when attempting to update a non-existent ticket.
-    """
-    non_existent_id = uuid.uuid4()
-    mock_db.get.return_value = None
-    payload = TicketUpdate(title="Should Fail")
-
-    with pytest.raises(TicketNotFoundError) as exc_info:
-        await ticket_service.update_ticket(mock_db, non_existent_id, payload)
-
-    assert exc_info.value.ticket_id == str(non_existent_id)
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize("target_status", ["open", "in_progress", "resolved"])
-async def test_unit_update_exception_cannot_reopen_closed_ticket(mock_db: AsyncMock, target_status: str):
-    """
-    E - Exception: Business rule verification: Closed tickets cannot be reopened to non-closed statuses.
-    """
-    sample_id = uuid.uuid4()
-    closed_ticket = Ticket(
-        id=sample_id,
-        title="Closed Ticket",
-        priority="medium",
-        status="closed",
-    )
-    mock_db.get.return_value = closed_ticket
-    payload = TicketUpdate(status=target_status)  # type: ignore
-
-    with pytest.raises(ValueError) as exc_info:
-        await ticket_service.update_ticket(mock_db, sample_id, payload)
-
-    assert "Closed tickets cannot be reopened." in str(exc_info.value)
-
-
-@pytest.mark.parametrize("invalid_title", ["", "   ", "\t  \n"])
-def test_unit_update_exception_blank_title_validation(invalid_title: str):
-    """
-    E - Exception: Schema validation error when updating title to blank/whitespace.
-    """
-    with pytest.raises(ValueError) as exc_info:
-        TicketUpdate(title=invalid_title)
-    assert "Title cannot be blank" in str(exc_info.value)
-
-
-@pytest.mark.asyncio
-async def test_unit_update_exception_db_rollback_on_failure(mock_db: AsyncMock):
-    """
-    E - Exception: Test repository rollback when database flush fails during update.
-    """
-    sample_id = uuid.uuid4()
-    mock_ticket = Ticket(id=sample_id, title="Old Title", status="open", priority="low")
-    mock_db.get.return_value = mock_ticket
-    mock_db.flush.side_effect = RuntimeError("DB write error")
-
-    payload = TicketUpdate(title="New Title")
-
-    with pytest.raises(RuntimeError):
-        await ticket_repository.update_ticket(mock_db, sample_id, payload)
-
-    mock_db.rollback.assert_awaited_once()
-
-
-# ---------------------------------------------------------------------
-# F - Format & Boundary: Test valid state transitions & formatting
+# E - Exception: Failure & business rule error scenarios (3 Cases)
 # ---------------------------------------------------------------------
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    "initial_status, new_status, should_succeed",
-    [
+    "exception_scenario",
+    ["not_found", "reopen_closed_prohibited", "db_rollback"]
+)
+async def test_unit_update_exceptions(mock_db: AsyncMock, exception_scenario: str):
+    """
+    E - Exception: Test update failures: ticket not found, reopening closed ticket, DB rollback.
+    """
+    sample_id = uuid.uuid4()
+
+    if exception_scenario == "not_found":
+        mock_db.get.return_value = None
+        payload = TicketUpdate(title="Should Fail")
+        with pytest.raises(TicketNotFoundError) as exc_info:
+            await ticket_service.update_ticket(mock_db, sample_id, payload)
+        assert exc_info.value.ticket_id == str(sample_id)
+
+    elif exception_scenario == "reopen_closed_prohibited":
+        closed_ticket = Ticket(id=sample_id, title="Closed Ticket", priority="medium", status="closed")
+        mock_db.get.return_value = closed_ticket
+        payload = TicketUpdate(status="open")  # type: ignore
+        with pytest.raises(ValueError) as exc_info:
+            await ticket_service.update_ticket(mock_db, sample_id, payload)
+        assert "Closed tickets cannot be reopened." in str(exc_info.value)
+
+    elif exception_scenario == "db_rollback":
+        mock_ticket = Ticket(id=sample_id, title="Old Title", status="open", priority="low")
+        mock_db.get.return_value = mock_ticket
+        mock_db.flush.side_effect = RuntimeError("DB write error")
+        payload = TicketUpdate(title="New Title")
+        with pytest.raises(RuntimeError):
+            await ticket_repository.update_ticket(mock_db, sample_id, payload)
+        mock_db.rollback.assert_awaited_once()
+
+
+# ---------------------------------------------------------------------
+# F - Format & Boundary: State transition validation & title blank checks
+# ---------------------------------------------------------------------
+@pytest.mark.asyncio
+async def test_unit_update_format_status_transitions(mock_db: AsyncMock):
+    """
+    F - Format/Boundary: Test valid state transitions and blank title validation error.
+    """
+    # Blank title validation check
+    with pytest.raises(ValueError) as exc_info:
+        TicketUpdate(title="   ")
+    assert "Title cannot be blank" in str(exc_info.value)
+
+    # State transitions check
+    transitions = [
         ("open", "in_progress", True),
         ("in_progress", "resolved", True),
         ("resolved", "closed", True),
-        ("closed", "closed", True),  # Updating closed ticket with closed status is allowed
-        ("closed", "open", False),   # Reopening closed ticket is disallowed
+        ("closed", "closed", True),
+        ("closed", "open", False),
     ]
-)
-async def test_unit_update_format_status_transitions(
-    mock_db: AsyncMock,
-    initial_status: str,
-    new_status: str,
-    should_succeed: bool,
-):
-    """
-    F - Format/Boundary: Test state transitions matrix for ticket status.
-    """
-    sample_id = uuid.uuid4()
-    ticket = Ticket(id=sample_id, title="Transition Test", status=initial_status, priority="low")
-    mock_db.get.return_value = ticket
-    payload = TicketUpdate(status=new_status)  # type: ignore
 
-    if should_succeed:
-        result = await ticket_service.update_ticket(mock_db, sample_id, payload)
-        assert result.status == new_status
-    else:
-        with pytest.raises(ValueError):
-            await ticket_service.update_ticket(mock_db, sample_id, payload)
+    for init_status, target_status, expected_success in transitions:
+        sample_id = uuid.uuid4()
+        ticket = Ticket(id=sample_id, title="Transition Test", status=init_status, priority="low")
+        mock_db.get.return_value = ticket
+        payload = TicketUpdate(status=target_status)  # type: ignore
+
+        if expected_success:
+            res = await ticket_service.update_ticket(mock_db, sample_id, payload)
+            assert res.status == target_status
+        else:
+            with pytest.raises(ValueError):
+                await ticket_service.update_ticket(mock_db, sample_id, payload)

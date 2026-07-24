@@ -16,7 +16,7 @@ from app.schemas.ticket import (
 )
 from app.services.ticket_service import ticket_service
  
-router = APIRouter()
+router = APIRouter(tags=["Tickets"],)
  
  
 @router.post(
@@ -102,18 +102,3 @@ async def delete(
         "message": "Ticket deleted successfully"
     }
 
-@router.get(
-    "/health",
-    response_model=dict[str, str]
-)
-async def health_check():
-    return {"status": "healthy"}
-
-@router.get("/ready")
-async def readiness_check():
-    if not await ticket_service.is_database_ready():
-        raise HTTPException(
-            status_code=503,
-            detail="Database is not ready"
-        )
-    return {"status": "ready"}

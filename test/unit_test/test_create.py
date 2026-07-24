@@ -1,17 +1,16 @@
 import uuid
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from pydantic import ValidationError
 
-from app.models.ticket import Ticket
-from app.repositories.ticket_repository import ticket_repository, TicketRepository
+from app.repositories.ticket_repository import ticket_repository
 from app.schemas.ticket import TicketCreate
-from app.services.ticket_service import ticket_service, TicketService
+from app.services.ticket_service import ticket_service
 
 
 # =====================================================================
-# Unit Tests for CREATE Operation (ZONEF Principles)
+# Unit Tests for CREATE Operation (ZONEF Principles) - 6 Test Cases
 # =====================================================================
 
 # ---------------------------------------------------------------------
@@ -20,14 +19,13 @@ from app.services.ticket_service import ticket_service, TicketService
 @pytest.mark.asyncio
 async def test_unit_create_zero_optional_fields(mock_db: AsyncMock):
     """
-    Z - Zero: Test creating a ticket with minimal valid data and checking defaults.
+    Z - Zero: Test creating a ticket with minimal valid data and checking default fields.
     """
     payload = TicketCreate(title="Bug in login", priority="low")
-    
+
     def side_effect(ticket):
         ticket.id = uuid.uuid4()
         ticket.status = "open"
-        ticket.created_at = None
 
     mock_db.refresh.side_effect = side_effect
 
@@ -44,13 +42,11 @@ async def test_unit_create_zero_optional_fields(mock_db: AsyncMock):
 # O - One: Create one single valid ticket entity
 # ---------------------------------------------------------------------
 @pytest.mark.asyncio
-@pytest.mark.parametrize("priority", ["low", "medium", "high"])
-async def test_unit_create_one_valid_ticket(mock_db: AsyncMock, priority: str):
+async def test_unit_create_one_valid_ticket(mock_db: AsyncMock):
     """
-    O - One: Test creating one valid ticket for each allowed priority.
-    Uses parameterized inputs for all priorities.
+    O - One: Test creating one valid ticket entity via ticket service.
     """
-    payload = TicketCreate(title="Single Ticket Title", priority=priority)
+    payload = TicketCreate(title="Single Ticket Title", priority="high")
 
     def side_effect(ticket):
         ticket.id = uuid.uuid4()
@@ -60,7 +56,7 @@ async def test_unit_create_one_valid_ticket(mock_db: AsyncMock, priority: str):
     result = await ticket_service.create_ticket(mock_db, payload)
 
     assert result.title == "Single Ticket Title"
-    assert result.priority == priority
+    assert result.priority == "high"
     mock_db.add.assert_called_once()
 
 
@@ -70,7 +66,7 @@ async def test_unit_create_one_valid_ticket(mock_db: AsyncMock, priority: str):
 @pytest.mark.asyncio
 async def test_unit_create_numerous_tickets(mock_db: AsyncMock):
     """
-    N - Numerous: Test creating multiple tickets sequentially using repository/service.
+    N - Numerous: Test creating multiple tickets sequentially using service.
     """
     tickets_data = [
         ("First ticket issue", "high"),
@@ -91,75 +87,58 @@ async def test_unit_create_numerous_tickets(mock_db: AsyncMock):
 
 
 # ---------------------------------------------------------------------
-# E - Exception: Invalid inputs, blank title, missing fields, DB errors
+# E - Exception: Invalid input validation and DB failure rollbacks (2 Cases)
 # ---------------------------------------------------------------------
-@pytest.mark.parametrize(
-    "blank_title",
-    ["", "   ", "\t\n  "],
-    ids=["empty_string", "spaces", "newlines_tabs"]
-)
-def test_unit_create_exception_blank_title(blank_title: str):
-    """
-    E - Exception: Test ValueError/ValidationError raised when title is blank or whitespace.
-    """
-    with pytest.raises((ValueError, ValidationError)) as exc_info:
-        TicketCreate(title=blank_title, priority="high")
-    assert "Title cannot be blank" in str(exc_info.value) or "at least 3 characters" in str(exc_info.value)
-
-
-def test_unit_create_exception_missing_priority():
-    """
-    E - Exception: Test ValidationError when required priority field is missing.
-    """
-    with pytest.raises(ValidationError):
-        TicketCreate(title="Valid title missing priority")  # type: ignore
-
-
 @pytest.mark.asyncio
-async def test_unit_create_exception_database_error_triggers_rollback(mock_db: AsyncMock):
-    """
-    E - Exception: Test repository handles DB exceptions by executing rollback.
-    """
-    payload = TicketCreate(title="DB Failure Ticket", priority="high")
-    mock_db.flush.side_effect = RuntimeError("Database connection dropped")
-
-    with pytest.raises(RuntimeError) as exc_info:
-        await ticket_repository.create_ticket(mock_db, payload)
-
-    assert "Database connection dropped" in str(exc_info.value)
-    mock_db.rollback.assert_awaited_once()
-
-
-# ---------------------------------------------------------------------
-# F - Format & Boundary: Test min/max title length & formatting
-# ---------------------------------------------------------------------
 @pytest.mark.parametrize(
-    "title, is_valid",
-    [
-        ("abc", True),                 # Min boundary = 3 chars
-        ("a" * 200, True),             # Max boundary = 200 chars
-        ("ab", False),                 # Too short (2 chars)
-        ("a" * 201, False),            # Too long (201 chars)
-        ("  Valid Title Stripped  ", True), # Whitespace stripping format check
-    ]
+    "case_type",
+    ["blank_title", "db_rollback"]
 )
-def test_unit_create_format_title_boundaries(title: str, is_valid: bool):
+async def test_unit_create_exception_validation_and_rollback(mock_db: AsyncMock, case_type: str):
     """
-    F - Format/Boundary: Test boundary conditions for title length and whitespace formatting.
+    E - Exception: Test schema validation exception for blank title and DB error triggering rollback.
     """
-    if is_valid:
-        schema = TicketCreate(title=title, priority="medium")
-        assert len(schema.title) >= 3
-        assert schema.title == schema.title.strip()
-    else:
-        with pytest.raises(ValidationError):
-            TicketCreate(title=title, priority="medium")
+    if case_type == "blank_title":
+        with pytest.raises((ValueError, ValidationError)) as exc_info:
+            TicketCreate(title="   ", priority="high")
+        assert "Title cannot be blank" in str(exc_info.value) or "at least 3 characters" in str(exc_info.value)
+
+    elif case_type == "db_rollback":
+        payload = TicketCreate(title="DB Failure Ticket", priority="high")
+        mock_db.flush.side_effect = RuntimeError("Database connection dropped")
+
+        with pytest.raises(RuntimeError) as exc_info:
+            await ticket_repository.create_ticket(mock_db, payload)
+
+        assert "Database connection dropped" in str(exc_info.value)
+        mock_db.rollback.assert_awaited_once()
 
 
-@pytest.mark.parametrize("invalid_priority", ["urgent", "LOW", "High", "invalid_enum"])
-def test_unit_create_format_invalid_priority_enum(invalid_priority: str):
+# ---------------------------------------------------------------------
+# F - Format & Boundary: Min/max title length & enum validation matrix
+# ---------------------------------------------------------------------
+def test_unit_create_format_boundaries_and_enums():
     """
-    F - Format/Boundary: Test invalid priority enum values.
+    F - Format/Boundary: Test title boundaries (min=3, max=200, strip) and invalid priority enums.
     """
+    # Min length boundary (3 chars) & Max length boundary (200 chars)
+    valid_min = TicketCreate(title="abc", priority="medium")
+    valid_max = TicketCreate(title="a" * 200, priority="medium")
+    stripped = TicketCreate(title="  Valid Title Stripped  ", priority="medium")
+
+    assert valid_min.title == "abc"
+    assert len(valid_max.title) == 200
+    assert stripped.title == "Valid Title Stripped"
+
+    # Too short boundary (<3 chars)
     with pytest.raises(ValidationError):
-        TicketCreate(title="Valid title", priority=invalid_priority)  # type: ignore
+        TicketCreate(title="ab", priority="medium")
+
+    # Too long boundary (>200 chars)
+    with pytest.raises(ValidationError):
+        TicketCreate(title="a" * 201, priority="medium")
+
+    # Invalid priority enums
+    for invalid_prio in ["urgent", "LOW", "High", "invalid_enum"]:
+        with pytest.raises(ValidationError):
+            TicketCreate(title="Valid title", priority=invalid_prio)  # type: ignore

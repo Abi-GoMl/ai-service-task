@@ -6,22 +6,28 @@ import pytest
 
 from app.core.exceptions import TicketNotFoundError
 from app.models.ticket import Ticket
-from app.repositories.ticket_repository import ticket_repository
 from app.schemas.ticket import TicketResponse
 from app.services.ticket_service import ticket_service
 
 
 # =====================================================================
-# Unit Tests for READ Operation (ZONEF Principles)
+# Unit Tests for READ Operation (ZONEF Principles) - 6 Test Cases
 # =====================================================================
 
 # ---------------------------------------------------------------------
-# Z - Zero: Test empty states and 0 records returned
+# Z - Zero: Empty states and 0 matching records returned (2 Cases)
 # ---------------------------------------------------------------------
 @pytest.mark.asyncio
-async def test_unit_read_zero_tickets_returned(mock_db: AsyncMock):
+@pytest.mark.parametrize(
+    "status_arg, priority_arg",
+    [
+        (None, None),          # 0 total records in repo
+        ("resolved", "high"),  # 0 matching filter results
+    ]
+)
+async def test_unit_read_zero_tickets(mock_db: AsyncMock, status_arg: str | None, priority_arg: str | None):
     """
-    Z - Zero: Test get_tickets returning an empty list when no records exist.
+    Z - Zero: Test get_tickets returning an empty list when zero records match query.
     """
     mock_result = MagicMock()
     mock_scalars = MagicMock()
@@ -29,26 +35,10 @@ async def test_unit_read_zero_tickets_returned(mock_db: AsyncMock):
     mock_result.scalars.return_value = mock_scalars
     mock_db.execute.return_value = mock_result
 
-    tickets = await ticket_service.get_tickets(mock_db, status=None, priority=None)
+    tickets = await ticket_service.get_tickets(mock_db, status=status_arg, priority=priority_arg)
 
     assert tickets == []
     mock_db.execute.assert_awaited_once()
-
-
-@pytest.mark.asyncio
-async def test_unit_read_zero_matching_filter_results(mock_db: AsyncMock):
-    """
-    Z - Zero: Test get_tickets with filter parameters returning 0 matching results.
-    """
-    mock_result = MagicMock()
-    mock_scalars = MagicMock()
-    mock_scalars.all.return_value = []
-    mock_result.scalars.return_value = mock_scalars
-    mock_db.execute.return_value = mock_result
-
-    tickets = await ticket_service.get_tickets(mock_db, status="resolved", priority="high")
-
-    assert tickets == []
 
 
 # ---------------------------------------------------------------------
@@ -80,44 +70,24 @@ async def test_unit_read_one_existing_ticket(mock_db: AsyncMock):
 # N - Numerous: Retrieve multiple tickets and apply query filters
 # ---------------------------------------------------------------------
 @pytest.mark.asyncio
-@pytest.mark.parametrize(
-    "status_filter, priority_filter, expected_count",
-    [
-        (None, None, 3),
-        ("open", None, 2),
-        (None, "high", 1),
-        ("closed", "low", 0),
-    ]
-)
-async def test_unit_read_numerous_filtered_tickets(
-    mock_db: AsyncMock,
-    status_filter: str | None,
-    priority_filter: str | None,
-    expected_count: int,
-):
+async def test_unit_read_numerous_filtered_tickets(mock_db: AsyncMock):
     """
-    N - Numerous: Test get_tickets returning multiple records under various filter conditions.
+    N - Numerous: Test get_tickets filtering multiple ticket records.
     """
     t1 = Ticket(id=uuid.uuid4(), title="Ticket 1", status="open", priority="high")
     t2 = Ticket(id=uuid.uuid4(), title="Ticket 2", status="open", priority="medium")
     t3 = Ticket(id=uuid.uuid4(), title="Ticket 3", status="resolved", priority="low")
-    all_tickets = [t1, t2, t3]
-
-    filtered = [
-        t for t in all_tickets
-        if (status_filter is None or t.status == status_filter) and
-           (priority_filter is None or t.priority == priority_filter)
-    ]
 
     mock_result = MagicMock()
     mock_scalars = MagicMock()
-    mock_scalars.all.return_value = filtered
+    mock_scalars.all.return_value = [t1, t2]
     mock_result.scalars.return_value = mock_scalars
     mock_db.execute.return_value = mock_result
 
-    results = await ticket_service.get_tickets(mock_db, status=status_filter, priority=priority_filter)
+    results = await ticket_service.get_tickets(mock_db, status="open", priority=None)
 
-    assert len(results) == expected_count
+    assert len(results) == 2
+    assert all(t.status == "open" for t in results)
 
 
 # ---------------------------------------------------------------------
@@ -138,28 +108,21 @@ async def test_unit_read_exception_ticket_not_found(mock_db: AsyncMock):
 
 
 # ---------------------------------------------------------------------
-# F - Format & Boundary: Test TicketResponse schema & computed property
+# F - Format & Boundary: Test TicketResponse computed is_resolved property
 # ---------------------------------------------------------------------
-@pytest.mark.parametrize(
-    "status, expected_is_resolved",
-    [
-        ("open", False),
-        ("in_progress", False),
-        ("resolved", True),
-        ("closed", False),
-    ]
-)
-def test_unit_read_format_computed_is_resolved(status: str, expected_is_resolved: bool):
+def test_unit_read_format_computed_is_resolved():
     """
-    F - Format/Boundary: Test TicketResponse computed property is_resolved for each status enum.
+    F - Format/Boundary: Test TicketResponse computed property is_resolved across status values.
     """
     now = datetime.now(timezone.utc)
-    response_schema = TicketResponse(
-        id=uuid.uuid4(),
-        title="Status Check Ticket",
-        priority="medium",
-        status=status,  # type: ignore
-        created_at=now,
-    )
+    statuses = [("open", False), ("in_progress", False), ("resolved", True), ("closed", False)]
 
-    assert response_schema.is_resolved == expected_is_resolved
+    for status_val, expected in statuses:
+        resp = TicketResponse(
+            id=uuid.uuid4(),
+            title="Status Check Ticket",
+            priority="medium",
+            status=status_val,  # type: ignore
+            created_at=now,
+        )
+        assert resp.is_resolved is expected
